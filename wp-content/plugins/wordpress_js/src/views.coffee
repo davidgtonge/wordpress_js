@@ -9,7 +9,7 @@ $ = jQuery
 class BaseView extends Backbone.View
   initialize: ->
     @$el = $(@el)
-    @model.bind "change", @render
+    if @model then @model.bind "change", @render
 
     @init()
 
@@ -52,4 +52,14 @@ class WJS.views.Test extends BaseView
     @
 
 
+class WJS.views.Logger extends BaseView
 
+  init: ->
+    WJS.sync.on "log", @render
+
+  render: (event, log = {type:"message", text:"Interface Initialised"}) =>
+    console.log arguments
+    @$el.html """
+    <span class="#{log.type}">#{log.text}</span>
+    """
+    @

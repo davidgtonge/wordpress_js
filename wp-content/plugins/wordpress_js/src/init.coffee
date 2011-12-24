@@ -36,49 +36,68 @@ class WJSSync extends Singleton
     #Call process queue unless its already running
     @processQueue() unless @running
 
+  last_run: 0
+
   processQueue: =>
 
     if @running
-      # Run the queue
-      # Set the active queue - limited to 10 at a time
-      if @queue.length > 10
-        activeQueue = @queue[0..9]
-        @queue = @queue[10..@queue.length]
+
+      now = new Date().getTime()
+      time_since_last_run = now - @last_run
+      if time_since_last_run < 5000
+        @trigger "log",
+          type: "message"
+          text: "Server syncs limited to every 5 seconds, the next sync will occur
+                in #{(5000 - time_since_last_run) / 1000} seconds"
+        setTimeout @processQueue, 5000 - time_since_last_run
       else
-        activeQueue = @queue[0..@queue.length]
-        @queue = []
+        @last_run = now
 
-      data = {}
-      # We use the cid as the key on an object to ensure that each model is only synced once per batch
-      # We get the latest state of the model by calling its toJSON method
-      for syncRequest in activeQueue
-        data[syncRequest.cid] =
-          values: syncRequest.model.toJSON()
-          action: syncRequest.action
 
-      # Now call the classes ajax method, we pass along the activeQueue, and expect to receive it back in the callback
-      # The callback expects an array. It uses underscores detect method to find the right model and then triggers
-      # A "synced" event, with the along with the relevant response.
+        # Run the queue
+        # Set the active queue - limited to 10 at a time
+        if @queue.length > 10
+          activeQueue = @queue[0..9]
+          @queue = @queue[10..@queue.length]
+        else
+          activeQueue = @queue[0..@queue.length]
+          @queue = []
 
-      @ajax data, activeQueue, (resp, status, xhr, activeQueue) ->
-        for cid, syncResponse of resp
-          syncRequest = _(activeQueue).detect (a) ->
-            a.cid is cid
-          console.log syncRequest
-          syncRequest.model.trigger "synced", syncResponse
-          syncRequest.options.success resp, status, xhr
-      , (resp, activeQueue) ->
+        data = {}
+        # We use the cid as the key on an object to ensure that each model is only synced once per batch
+        # We get the latest state of the model by calling its toJSON method
         for syncRequest in activeQueue
-          syncRequest.options.error resp
+          data[syncRequest.cid] =
+            values: syncRequest.model.toJSON()
+            action: syncRequest.action
+
+        @trigger "log",
+          type: "message"
+          text: "Synchronising #{activeQueue.length} operations to the server"
+
+        # Now call the classes ajax method, we pass along the activeQueue, and expect to receive it back in the callback
+        # The callback expects an array. It uses underscores detect method to find the right model and then triggers
+        # A "synced" event, with the along with the relevant response.
+
+        @ajax data, activeQueue, (resp, status, xhr, activeQueue) ->
+          for cid, syncResponse of resp
+            syncRequest = _(activeQueue).detect (a) ->
+              a.cid is cid
+            console.log syncRequest
+            syncRequest.model.trigger "synced", syncResponse
+            syncRequest.options.success resp, status, xhr
+        , (resp, activeQueue) ->
+          for syncRequest in activeQueue
+            syncRequest.options.error resp
 
 
 
-      # If there are still items in the queue then we set a timer to call the function again after 3 seconds
-      # If not we set the running flag to false
-      if @queue.length > 0
-        setTimeout processQueue, 3000
-      else
-        @running = false
+        # If there are still items in the queue then we set a timer to call the function again after 3 seconds
+        # If not we set the running flag to false
+        if @queue.length > 0
+          setTimeout processQueue, 5000
+        else
+          @running = false
 
     else
       # The queue wasn't being processed, so set the running flag to true
@@ -98,10 +117,18 @@ class WJSSync extends Singleton
       type:'POST'
       dataType:'json'
       success: (resp, status, xhr) =>
+        @trigger "log",
+          type: "success"
+          text: "Succesfully synced #{activeQueue.length} operations with the server"
+
         if _.isObject resp
           @success_count += activeQueue.length
           success_cb(resp, status, xhr, activeQueue)
       error: (response) =>
+        @trigger "log",
+          type: "error"
+          text: "Failed to sync #{activeQueue.length} operations with the server. Error: #{response}"
+
         failure_cb response, activeQueue
         @failure_count += activeQueue.length
         # if there is a failure try again
@@ -155,9 +182,11 @@ class WJSKlass extends Singleton
     @data = {}
 
   init_views: =>
-    view = new @views.Test
-      model: @store.posts.at 0
-    $('#wjs_app').html view.render().el
+    views = [
+      new @views.Test model: @store.posts.at 0
+      new @views.Logger
+    ]
+    $('#wjs_app').html (view.render().el for view in views)
 
 
 window.WJS = WJSKlass.get()
