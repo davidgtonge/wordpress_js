@@ -40,14 +40,31 @@ function wjs_setup(){
      * Todo: Only run this code conditionally
      */
     if(is_admin() && $_REQUEST['page'] === "wordpress_js"){
+        $jqui_scripts = array(
+           'jquery-ui-core', 'jquery-ui-tabs', 'jquery-ui-sortable', 'jquery-ui-draggable', 'jquery-ui-droppable',
+            'jquery-ui-selectable', 'jquery-ui-datepicker', 'jquery-ui-resizeable', 'jquery-ui-dialog'
+        );
+        foreach($jqui_scripts as $script){
+            wp_deregister_script($script);
+        }
         wp_enqueue_script('underscore',WJS_LIBS . "underscore.js");
         wp_enqueue_script('underscore_string', WJS_LIBS . "underscore.string.min.js", array('underscore'));
         wp_enqueue_script('backbone', WJS_LIBS . "backbone.js", array('underscore'));
+        wp_enqueue_script('deep-model', WJS_LIBS . "deep-model.js", array('backbone'));
         wp_enqueue_script('xdate', WJS_LIBS . "xdate.js");
+        wp_enqueue_script('jqui', WJS_BASE . "/jquery-ui-bootstrap/js/jquery-ui-1.8.16.custom.min.js", array('jquery'));
+        wp_enqueue_style('jqui', WJS_BASE . "/jquery-ui-bootstrap/css/custom-theme/jquery-ui-1.8.16.custom.css");
+        wp_enqueue_style('bootstrap', WJS_BASE . "/jquery-ui-bootstrap/bootstrap/bootstrap.css");
+
         wp_enqueue_script('wjs_plugins', WJS_LIBS . "plugins.js");
         wp_enqueue_script('wjs_init', WJS_BASE . "/js/init.js?time=" . time());
         wp_enqueue_script('wjs_models', WJS_BASE . "/js/models.js?time=" . time());
         wp_enqueue_script('wjs_views', WJS_BASE . "/js/views.js?time=" . time());
+
+        add_action('admin_footer', 'wjs_templates');
+        function wjs_templates(){
+            include('templates.html');
+        }
 
     }
 
@@ -61,11 +78,13 @@ function wjs_setup(){
 
 }
 
+
 add_action("admin_menu", "wjs_menu" );
 function wjs_menu(){
     add_menu_page('WordPress JS', 'WordPress JS', 'manage_options','wordpress_js','wjs_show_page');
 }
 function wjs_show_page(){
+    include "wjs_scaffold.html";
     echo "<div id='wjs_app'></div>";
 }
 
